@@ -396,7 +396,7 @@ def delete_api_key(key_id: int, db: Session = Depends(database.get_db)):
     return None
 
 # Montar el router de administración en la aplicación principal
-app.include_router(admin_router, prefix="/admin")
+app.include_router(admin_router)
 
 
 # --- Ejecución Principal (para desarrollo) ---
