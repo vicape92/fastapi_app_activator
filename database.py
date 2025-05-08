@@ -30,7 +30,7 @@ class ApplicationDB(Base):
     message_inactive_version = Column(String, default="Version outdated. Please update the application.")
     message_inactive_user = Column(String, default="User not authorized for this application.")
     message_inactive_license = Column(String, default="Invalid, expired, or missing license key.")
-    api_keys = relationship("ApiKeyDB", back_populates="application")
+    api_keys = relationship("ApiKeyDB", back_populates="application", cascade="all, delete-orphan")
 
 class ApiKeyDB(Base):
     __tablename__ = "api_keys"

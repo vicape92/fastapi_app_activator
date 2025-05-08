@@ -1,5 +1,6 @@
 # main.py
 import secrets # Para generar claves API seguras
+from datetime import datetime # Importar datetime
 from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
@@ -54,6 +55,32 @@ class ApplicationResponse(ApplicationBase):
 class ApplicationCreationResponse(ApplicationResponse):
     generated_api_key: str = Field(..., description="Clave API generada para esta aplicación. ¡Guárdala bien, no se mostrará de nuevo!")
     message: str = Field(..., description="Instrucciones o estado de la creación.")
+
+# Nuevos modelos Pydantic para la gestión de API Keys
+class ApiKeyBase(BaseModel):
+    description: Optional[str] = Field(None, description="Descripción de la clave API")
+
+class ApiKeyInfoResponse(ApiKeyBase):
+    id: int
+    application_id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    # No incluir key_hash por seguridad
+
+    class Config:
+        from_attributes = True
+
+class ApiKeyCreate(ApiKeyBase):
+    description: str = Field("Clave API generada manualmente vía admin", description="Descripción para la nueva clave API")
+
+class ApiKeyGeneratedResponse(BaseModel):
+    plain_api_key: str = Field(..., description="La nueva clave API generada. ¡Guárdala bien, no se mostrará de nuevo!")
+    id: int
+    application_id: int
+    description: str
+    is_active: bool
+    message: str
 
 # --- FastAPI App Instance ---
 app = FastAPI(
@@ -255,13 +282,116 @@ def delete_application(app_name: str, db: Session = Depends(database.get_db)):
     if not db_app:
         raise HTTPException(status_code=404, detail=f"Aplicación '{app_name}' no encontrada.")
     
-    # Consideración: ¿Qué hacer con las ApiKeyDB asociadas? Por ahora, se quedarían huérfanas
-    # o podrían causar error si hay FK con ON DELETE RESTRICT.
-    # Para una eliminación completa, también deberías eliminar las ApiKeyDB asociadas.
-    # Ejemplo (requiere cargar la relación o hacer otra query):
-    # db.query(database.ApiKeyDB).filter(database.ApiKeyDB.application_id == db_app.id).delete()
+    # Eliminar ApiKeyDB asociadas
+    db.query(database.ApiKeyDB).filter(database.ApiKeyDB.application_id == db_app.id).delete(synchronize_session=False)
     
     db.delete(db_app)
+    db.commit()
+    return None
+
+# --- Endpoints de Administración (CRUD para API Keys de una Aplicación) ---
+
+@admin_router.get(
+    "/applications/{app_name}/keys",
+    response_model=List[ApiKeyInfoResponse],
+    tags=["Admin - API Keys"],
+    summary="Listar claves API de una aplicación"
+)
+def list_application_api_keys(app_name: str, db: Session = Depends(database.get_db)):
+    """
+    Lista todas las claves API (información básica, no la clave en sí) asociadas a una aplicación específica.
+    """
+    db_app = db.query(database.ApplicationDB).filter(database.ApplicationDB.name == app_name).first()
+    if not db_app:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Aplicación '{app_name}' no encontrada.")
+    
+    api_keys = db.query(database.ApiKeyDB).filter(database.ApiKeyDB.application_id == db_app.id).all()
+    if not api_keys:
+        pass
+    return api_keys
+
+@admin_router.post(
+    "/applications/{app_name}/keys",
+    response_model=ApiKeyGeneratedResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Admin - API Keys"],
+    summary="Generar nueva clave API para una aplicación"
+)
+def create_api_key_for_application(
+    app_name: str,
+    api_key_data: ApiKeyCreate, # Permite pasar una descripción
+    db: Session = Depends(database.get_db)
+):
+    """
+    Genera una nueva clave API para una aplicación existente.
+    La clave en texto plano se devuelve una única vez.
+    """
+    db_app = db.query(database.ApplicationDB).filter(database.ApplicationDB.name == app_name).first()
+    if not db_app:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Aplicación '{app_name}' no encontrada.")
+
+    plain_api_key = secrets.token_urlsafe(32)
+    hashed_api_key = database.hash_api_key(plain_api_key)
+
+    new_db_api_key = database.ApiKeyDB(
+        key_hash=hashed_api_key,
+        application_id=db_app.id,
+        description=api_key_data.description if api_key_data.description else f"Clave adicional para {db_app.name}",
+        is_active=True # Nueva clave generada está activa por defecto
+    )
+    db.add(new_db_api_key)
+    db.commit()
+    db.refresh(new_db_api_key)
+
+    return ApiKeyGeneratedResponse(
+        plain_api_key=plain_api_key,
+        id=new_db_api_key.id,
+        application_id=new_db_api_key.application_id,
+        description=new_db_api_key.description,
+        is_active=new_db_api_key.is_active,
+        message=f"Nueva clave API generada para la aplicación '{db_app.name}'. ¡Guárdala de forma segura!"
+    )
+
+@admin_router.put(
+    "/api_keys/{key_id}/status",
+    response_model=ApiKeyInfoResponse,
+    tags=["Admin - API Keys"],
+    summary="Activar o desactivar una clave API"
+)
+def update_api_key_status(
+    key_id: int,
+    activate: bool = Query(..., description="Establecer a 'true' para activar, 'false' para desactivar."),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Activa o desactiva una clave API específica por su ID.
+    """
+    db_api_key = db.query(database.ApiKeyDB).filter(database.ApiKeyDB.id == key_id).first()
+    if not db_api_key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Clave API con ID {key_id} no encontrada.")
+
+    db_api_key.is_active = activate
+    db_api_key.updated_at = datetime.utcnow() # Actualizar manualmente si onupdate no se dispara siempre
+    db.commit()
+    db.refresh(db_api_key)
+    return db_api_key
+
+@admin_router.delete(
+    "/api_keys/{key_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["Admin - API Keys"],
+    summary="Eliminar una clave API"
+)
+def delete_api_key(key_id: int, db: Session = Depends(database.get_db)):
+    """
+    Elimina permanentemente una clave API específica por su ID.
+    Esta acción no se puede deshacer.
+    """
+    db_api_key = db.query(database.ApiKeyDB).filter(database.ApiKeyDB.id == key_id).first()
+    if not db_api_key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Clave API con ID {key_id} no encontrada.")
+
+    db.delete(db_api_key)
     db.commit()
     return None
 
