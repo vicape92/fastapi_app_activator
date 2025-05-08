@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic[email]
+pydantic-settings
+python-dotenv
+# aiosqlite # No es necesario si usamos SQLAlchemy síncrono con FastAPI
