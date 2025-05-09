@@ -91,6 +91,7 @@ app = FastAPI(
 
 # Router para los endpoints de administración, protegido con claves de admin del .env
 admin_router = APIRouter(
+    prefix="/admin",
     tags=["Admin"],
     dependencies=[Depends(security.get_admin_api_key)],
     responses={404: {"description": "No encontrado"}}
