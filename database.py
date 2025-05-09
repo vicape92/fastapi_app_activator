@@ -57,10 +57,10 @@ def populate_initial_data(db: Session):
         print("Populating initial application configurations and API keys...")
         initial_apps_configs = [
             {
-                "name":"MiAppPython1",
+                "name":"GenericApp",
                 "globally_active":True,
                 "min_version":"1.0.0",
-                "message_active":"Aplicación Python 1 operativa.",
+                "message_active":"Aplicación genérica activa.",
                 "allowed_users":["dev_user", "info_user"]
             },
             {

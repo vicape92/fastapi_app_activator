@@ -35,13 +35,13 @@ async def get_application_from_api_key(
     if not db_api_key_entry or not db_api_key_entry.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid or inactive API Key."
+            detail="Clave API inválida o inactiva."
         )
     
     # Verificar si la clave está asociada a una aplicación (debería estarlo siempre)
     if not db_api_key_entry.application: 
         # Esto indicaría un problema de consistencia en los datos
-        raise HTTPException(status_code=500, detail="API Key configuration error: No application associated with this key.")
+        raise HTTPException(status_code=500, detail="Error de configuración de la Clave API: No hay aplicación asociada a esta clave.")
 
     # Devolver el objeto ApplicationDB asociado a la clave API válida
     return db_api_key_entry.application
@@ -52,7 +52,7 @@ async def get_admin_api_key(api_key_header: str = Security(api_key_header_auth))
     if not api_key_header:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authenticated or Admin API Key missing."
+            detail="No autenticado o clave API de administrador faltante."
         )
     # Las claves de administrador siguen viniendo del .env por simplicidad y separación de roles
     if api_key_header in settings.ADMIN_API_KEYS:
@@ -60,5 +60,5 @@ async def get_admin_api_key(api_key_header: str = Security(api_key_header_auth))
     else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid or insufficient privileges. Admin API Key required."
+            detail="Privilegios inválidos o insuficientes. Se requiere Clave API de Administrador."
         )
