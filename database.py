@@ -37,7 +37,7 @@ class ApiKeyDB(Base):
     id = Column(Integer, primary_key=True, index=True)
     key_hash = Column(String, unique=True, index=True, nullable=False)
     description = Column(String, nullable=True)
-    application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
+    application_id = Column(Integer, ForeignKey("applications.id"), nullable=False, index=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     application = relationship("ApplicationDB", back_populates="api_keys")
@@ -55,37 +55,9 @@ def get_db():
 def populate_initial_data(db: Session):
     if db.query(ApplicationDB).count() == 0:
         print("Populating initial application configurations and API keys...")
-        initial_apps_configs = [
-            {
-                "name":"GenericApp",
-                "globally_active":True,
-                "min_version":"1.0.0",
-                "message_active":"Aplicación genérica activa.",
-                "allowed_users":["dev_user", "info_user"]
-            },
-            {
-                "name":"WebClienteJS",
-                "globally_active":True,
-                "min_version":"2.1.0",
-                "allowed_users":["dev_team_user", "fotografo_pro"],
-                "message_active":"Servicio web para clientes disponible.",
-                "message_inactive_version":"WebClienteJS: Versión desactualizada. Se requiere v2.1.0+."
-            },
-            {
-                "name":"HerramientaInternaPy",
-                "globally_active":False, # Ejemplo de app desactivada por defecto
-                "valid_licenses":["DEV-ACCESS-001"],
-                "message_active":"Herramienta interna lista.",
-                "message_inactive_license":"HerramientaInternaPy: Licencia no válida o requerida."
-            },
-            {
-                "name":"AppSinRestricciones", # Una app simple siempre activa
-                "globally_active":True,
-                "message_active":"App genérica activa."
-            }
-        ]
+        initial_apps_configs = []
 
-        generated_keys_info = [] # Para guardar info de claves generadas
+        generated_keys_info = []
 
         for app_config_data in initial_apps_configs:
             # 1. Crear la configuración de la aplicación
