@@ -10,7 +10,7 @@ import database # Módulo para la base de datos
 import security # Módulo para la seguridad y autenticación
 from settings import settings # Para configuraciones generales
 
-# --- Pydantic Models ---
+# --- Modelos Pydantic ---
 
 class AppStatusResponse(BaseModel):
     app_name: str
@@ -25,7 +25,7 @@ class ApplicationBase(BaseModel):
     min_version: Optional[str] = Field(None, pattern=r"^\d+\.\d+\.\d+$", description="Versión mínima (ej: '1.0.0')")
     allowed_users: Optional[List[str]] = Field(None, description="Lista de identificadores de usuario permitidos")
     valid_licenses: Optional[List[str]] = Field(None, description="Lista de claves de licencia válidas")
-    message_active: str = "Application operational."
+    message_active: str = "Aplicación operativa."
     message_inactive_default: str = "La aplicación está actualmente inactiva por razones no especificadas."
     message_inactive_global: str = "La aplicación está desactivada globalmente por el administrador."
     message_inactive_version: str = "Versión desactualizada. Por favor, actualice la aplicación."
@@ -82,7 +82,7 @@ class ApiKeyGeneratedResponse(BaseModel):
     is_active: bool
     message: str
 
-# --- FastAPI App Instance ---
+# --- Instancia FastAPI ---
 app = FastAPI(
     title="API de Estado de Aplicaciones con Claves en BD",
     description="Gestiona y consulta el estado de activación de aplicaciones. Las claves de cliente se almacenan y validan contra la base de datos.",

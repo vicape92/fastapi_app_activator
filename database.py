@@ -24,12 +24,12 @@ class ApplicationDB(Base):
     min_version = Column(String, nullable=True)
     allowed_users = Column(JSON, nullable=True)
     valid_licenses = Column(JSON, nullable=True)
-    message_active = Column(String, default="Application operational.")
-    message_inactive_default = Column(String, default="Application is currently inactive for unspecified reasons.")
-    message_inactive_global = Column(String, default="Application is globally disabled by administrator.")
-    message_inactive_version = Column(String, default="Version outdated. Please update the application.")
-    message_inactive_user = Column(String, default="User not authorized for this application.")
-    message_inactive_license = Column(String, default="Invalid, expired, or missing license key.")
+    message_active = Column(String, default="Aplicación operativa.")
+    message_inactive_default = Column(String, default="La aplicación está inactiva actualmente por razones no especificadas.")
+    message_inactive_global = Column(String, default="La aplicación está deshabilitada globalmente por el administrador.")
+    message_inactive_version = Column(String, default="Versión desactualizada. Por favor, actualice la aplicación.")
+    message_inactive_user = Column(String, default="Usuario no autorizado para esta aplicación.")
+    message_inactive_license = Column(String, default="Clave de licencia inválida, expirada o faltante.")
     api_keys = relationship("ApiKeyDB", back_populates="application", cascade="all, delete-orphan")
 
 class ApiKeyDB(Base):
@@ -54,7 +54,7 @@ def get_db():
 
 def populate_initial_data(db: Session):
     if db.query(ApplicationDB).count() == 0:
-        print("Populating initial application configurations and API keys...")
+        print("Poblando configuraciones iniciales de aplicaciones y claves API...")
         initial_apps_configs = []
 
         generated_keys_info = []
@@ -82,14 +82,14 @@ def populate_initial_data(db: Session):
             })
         
         db.commit() # Commit de todas las apps y claves
-        print("Initial data populated successfully.")
+        print("Datos iniciales poblados exitosamente.")
         print("--------------------------------------------------------------------")
-        print("GENERATED API KEYS FOR INITIAL APPLICATIONS (¡GUARDAR DE FORMA SEGURA!):")
+        print("CLAVES API GENERADAS PARA APLICACIONES INICIALES (¡GUARDAR DE FORMA SEGURA!):")
         for key_info in generated_keys_info:
-            print(f"  App: {key_info['app_name']:<25} API Key: {key_info['api_key']}")
+            print(f"  App: {key_info['app_name']:<25} Clave API: {key_info['api_key']}")
         print("--------------------------------------------------------------------")
 
     else:
         # Esto es normal si la base de datos ya existe y tiene datos.
-        # print("Database already contains data. Skipping initial population.")
+        # print("La base de datos ya contiene datos. Omitiendo población inicial.")
         pass

@@ -22,7 +22,7 @@ async def get_application_from_api_key(
     if not api_key_header:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authenticated or API Key missing."
+            detail="No autenticado o clave API de cliente faltante."
         )
     
     # Hashear la clave proporcionada por el cliente para compararla con los hashes almacenados
