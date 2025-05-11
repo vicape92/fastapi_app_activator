@@ -6,8 +6,13 @@ from sqladmin.authentication import AuthenticationBackend
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 from starlette.authentication import AuthCredentials, BaseUser
+from typing import Any  # Added for type hinting
 
-from database import engine, ApplicationDB, ApiKeyDB, AdminUserDB, get_db, SessionLocal # Added SessionLocal
+# Import WTForms fields and validators
+from wtforms import PasswordField, Form
+from wtforms.validators import DataRequired, Optional
+
+from database import engine, ApplicationDB, ApiKeyDB, AdminUserDB, get_db, SessionLocal  # Added SessionLocal
 from settings import settings
 
 # Nueva clase BaseUser para representar un administrador autenticado
@@ -133,18 +138,56 @@ class AdminUserAdmin(ModelView, model=AdminUserDB):
     name_plural = "Usuarios Admin"
     icon = "fa-solid fa-user-shield"
 
+    # Define an extra field for password input in forms
+    form_extra_fields = {
+        "password": PasswordField("Contraseña")
+    }
+
+    # Define arguments for form fields, including validators
+    # We will adjust validators dynamically in on_form_prefill
+    form_args = {
+        "password": {
+            "validators": [] 
+        }
+    }
+
+    # Specify columns to include in the form (create and edit)
+    form_columns = [AdminUserDB.username, "password"]
+
+    async def on_form_prefill(self, form: Form, obj: Any, request: Request) -> Form:
+        """
+        Modifica el formulario antes de que se renderice.
+        Hace que la contraseña sea obligatoria en la creación y opcional en la edición.
+        """
+        if obj is None:  # Formulario de creación
+            form.password.validators = [DataRequired(message="La contraseña es obligatoria.")]
+            form.password.label.text = "Contraseña (obligatoria)"
+        else:  # Formulario de edición
+            form.password.validators = [Optional()]
+            form.password.label.text = "Nueva Contraseña"
+            form.password.description = "Dejar en blanco para no cambiar la contraseña actual."
+        return form
+
     async def on_model_change(self, data: dict, model: AdminUserDB, is_created: bool, request: Request) -> None:
-        # Password hashing is handled by the model's set_password method,
-        # but SQLAdmin might try to set it directly.
-        # This ensures if 'password' field is in form, it's hashed.
-        # However, for AdminUser, we typically handle password changes via a custom form or method.
-        # For now, we assume password changes are not directly done via a simple 'password' field in the main form.
-        # If you add a password field to the form, you'd handle its hashing here.
-        pass
+        """
+        Se llama antes de guardar el modelo (crear o actualizar).
+        Hashea y establece la contraseña si se proporcionó una nueva.
+        """
+        password = data.get("password")
+
+        if password:
+            model.set_password(password)
+        elif is_created:
+            # Esto no debería ocurrir si el validador DataRequired funciona en la creación.
+            # Como salvaguarda, si password_hash no está establecido (lo que set_password haría).
+            if not model.password_hash:
+                 raise HTTPException(
+                    status_code=400, 
+                    detail="La contraseña es obligatoria al crear un nuevo usuario administrador."
+                )
 
     async def on_model_delete(self, model: AdminUserDB, request: Request) -> None:
         # Usar SessionLocal directamente ya que self.session_maker podría no estar disponible
-        # o correctamente configurado en todos los contextos de ModelView.
         db = SessionLocal()
         try:
             count = db.query(AdminUserDB).count()
