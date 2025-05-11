@@ -5,7 +5,6 @@ from sqlalchemy.orm import sessionmaker, Session, relationship
 from datetime import datetime, timezone
 import hashlib
 import secrets
-from passlib.context import CryptContext
 
 from settings import settings
 
@@ -13,9 +12,6 @@ DATABASE_URL = settings.DATABASE_URL
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
-
-# Configuración de Passlib para hasheo de contraseñas
-crypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_api_key(api_key: str) -> str:
     return hashlib.sha256(api_key.encode('utf-8')).hexdigest()
@@ -45,20 +41,6 @@ class ApiKeyDB(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     application = relationship("ApplicationDB", back_populates="api_keys")
-
-# Nuevo modelo para usuarios del panel de administración
-class AdminUserDB(Base):
-    __tablename__ = "admin_users"
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True, nullable=False)
-    password_hash = Column(String, nullable=False)
-    # Podrías añadir más campos como: is_active, last_login, email, etc.
-
-    def verify_password(self, plain_password: str) -> bool:
-        return crypt_context.verify(plain_password, self.password_hash)
-
-    def set_password(self, plain_password: str):
-        self.password_hash = crypt_context.hash(plain_password)
 
 def create_db_and_tables():
     Base.metadata.create_all(bind=engine)
@@ -111,21 +93,3 @@ def populate_initial_data(db: Session):
     else:
         # print("La base de datos ya contiene datos. Omitiendo población inicial.")
         pass
-
-    # Segundo, crear el usuario administrador por defecto si no existe ninguno
-    if db.query(AdminUserDB).count() == 0:
-        print(f"INFO: No AdminUserDB users found. Attempting to create default admin user.")
-        print(f"INFO: Using DEFAULT_ADMIN_PANEL_USERNAME: '{settings.DEFAULT_ADMIN_PANEL_USERNAME}' for default admin.")
-        # Asegúrate de que DEFAULT_ADMIN_PANEL_PASSWORD también se está leyendo como esperas.
-        # No imprimimos la contraseña directamente por seguridad.
-        if not settings.DEFAULT_ADMIN_PANEL_USERNAME or not settings.DEFAULT_ADMIN_PANEL_PASSWORD:
-            print("ERROR: DEFAULT_ADMIN_PANEL_USERNAME or DEFAULT_ADMIN_PANEL_PASSWORD is not set in settings.")
-            return
-
-        default_admin = AdminUserDB(username=settings.DEFAULT_ADMIN_PANEL_USERNAME)
-        default_admin.set_password(settings.DEFAULT_ADMIN_PANEL_PASSWORD) # Hashear la contraseña
-        db.add(default_admin)
-        db.commit()
-        print(f"INFO: Default admin user '{settings.DEFAULT_ADMIN_PANEL_USERNAME}' created successfully.")
-    else:
-        print("INFO: AdminUserDB already contains users. Skipping creation of default admin user.")

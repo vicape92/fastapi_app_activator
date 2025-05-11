@@ -10,10 +10,7 @@ import database # Módulo para la base de datos
 import security # Módulo para la seguridad y autenticación
 from settings import settings # Para configuraciones generales
 
-from database import engine, ApplicationDB, ApiKeyDB, AdminUserDB, get_db # Importar AdminUserDB y get_db
-
-# Import the admin panel setup
-from admin_panel import init_admin
+from database import engine, ApplicationDB, ApiKeyDB, get_db # Importar get_db
 
 # --- Modelos Pydantic ---
 
@@ -402,9 +399,6 @@ def delete_api_key(key_id: int, db: Session = Depends(database.get_db)):
 
 # Montar el router de administración en la aplicación principal
 app.include_router(admin_router)
-
-# --- Configuración de SQLAdmin ---
-init_admin(app, database.engine) # Initialize the admin panel
 
 # --- Ejecución Principal (para desarrollo) ---
 if __name__ == "__main__":

@@ -5,6 +5,3 @@ pydantic[email]
 pydantic-settings
 python-dotenv
 # aiosqlite # No es necesario si usamos SQLAlchemy síncrono con FastAPI
-sqladmin
-passlib[bcrypt]
-itsdangerous
