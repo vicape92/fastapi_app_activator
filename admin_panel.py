@@ -151,7 +151,7 @@ class AdminUserAdmin(ModelView, model=AdminUserDB):
     }
 
     # Specify columns to include in the form (create and edit)
-    form_columns = [AdminUserDB.username, "password"]
+    form_columns = [AdminUserDB.username]
 
     async def on_form_prefill(self, form: Form, obj: Any, request: Request) -> Form:
         """
