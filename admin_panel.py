@@ -131,7 +131,6 @@ class AdminUserAdmin(ModelView, model=AdminUserDB):
     column_searchable_list = [AdminUserDB.username]
     column_sortable_list = [AdminUserDB.id, AdminUserDB.username]
     
-    form_excluded_columns = [AdminUserDB.password_hash]
     column_details_exclude_list = [AdminUserDB.password_hash]
 
     name = "Usuario Admin"
