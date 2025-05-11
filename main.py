@@ -10,15 +10,10 @@ import database # Módulo para la base de datos
 import security # Módulo para la seguridad y autenticación
 from settings import settings # Para configuraciones generales
 
-# --- SQLAdmin Imports ---
-from sqladmin import Admin, ModelView
-from sqladmin.authentication import AuthenticationBackend
-from starlette.requests import Request
-from starlette.responses import RedirectResponse
-from starlette.authentication import AuthCredentials, BaseUser
-
 from database import engine, ApplicationDB, ApiKeyDB, AdminUserDB, get_db # Importar AdminUserDB y get_db
-from database import crypt_context # Importar crypt_context para contraseñas
+
+# Import the admin panel setup
+from admin_panel import init_admin
 
 # --- Modelos Pydantic ---
 
@@ -155,13 +150,13 @@ async def get_application_status(
     La aplicación se identifica mediante la X-API-KEY proporcionada.
     """
     details = {
-        "query_params_received": { # Para debug o información adicional
+        "parámetros_recibidos": { # Para debug o información adicional
             "app_version": app_version,
             "user_id": user_id,
             "license_key": license_key,
         },
-        "identified_app_id": db_app.id,
-        "identified_app_name": db_app.name
+        "app_identificada_id": db_app.id,
+        "app_identificada_nombre": db_app.name
     }
 
     is_active = True
@@ -211,7 +206,7 @@ async def get_application_status(
     "/applications/",
     response_model=ApplicationCreationResponse,
     status_code=status.HTTP_201_CREATED,
-    tags=["Admin - Applications"]
+    tags=["Admin - Aplicaciones"]
 )
 def create_application_and_key(
     app_data: ApplicationCreate,
@@ -256,19 +251,19 @@ def create_application_and_key(
         message=f"Aplicación '{new_app_config.name}' creada con ID {new_app_config.id}. La clave API generada está activa y asociada. ¡Guárdala de forma segura, no se mostrará de nuevo!"
     )
 
-@admin_router.get("/applications/", response_model=List[ApplicationResponse], tags=["Admin - Applications"])
+@admin_router.get("/applications/", response_model=List[ApplicationResponse], tags=["Admin - Aplicaciones"])
 def list_applications(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db)):
     apps = db.query(database.ApplicationDB).offset(skip).limit(limit).all()
     return apps
 
-@admin_router.get("/applications/{app_name}", response_model=ApplicationResponse, tags=["Admin - Applications"])
+@admin_router.get("/applications/{app_name}", response_model=ApplicationResponse, tags=["Admin - Aplicaciones"])
 def get_application_details(app_name: str, db: Session = Depends(database.get_db)):
     db_app = db.query(database.ApplicationDB).filter(database.ApplicationDB.name == app_name).first()
     if not db_app:
         raise HTTPException(status_code=404, detail=f"Aplicación '{app_name}' no encontrada.")
     return db_app
 
-@admin_router.put("/applications/{app_name}", response_model=ApplicationResponse, tags=["Admin - Applications"])
+@admin_router.put("/applications/{app_name}", response_model=ApplicationResponse, tags=["Admin - Aplicaciones"])
 def update_application(
     app_name: str,
     app_update_data: ApplicationUpdate,
@@ -286,7 +281,7 @@ def update_application(
     db.refresh(db_app)
     return db_app
 
-@admin_router.delete("/applications/{app_name}", status_code=status.HTTP_204_NO_CONTENT, tags=["Admin - Applications"])
+@admin_router.delete("/applications/{app_name}", status_code=status.HTTP_204_NO_CONTENT, tags=["Admin - Aplicaciones"])
 def delete_application(app_name: str, db: Session = Depends(database.get_db)):
     db_app = db.query(database.ApplicationDB).filter(database.ApplicationDB.name == app_name).first()
     if not db_app:
@@ -409,156 +404,7 @@ def delete_api_key(key_id: int, db: Session = Depends(database.get_db)):
 app.include_router(admin_router)
 
 # --- Configuración de SQLAdmin ---
-
-# Nueva clase BaseUser para representar un administrador autenticado
-class AuthenticatedAdmin(BaseUser):
-    def __init__(self, user_id: int, username: str) -> None:
-        self.user_id = user_id
-        self.username = username
-
-    @property
-    def is_authenticated(self) -> bool:
-        return True
-
-    @property
-    def display_name(self) -> str:
-        return self.username
-
-class AdminAuth(AuthenticationBackend):
-    async def login(self, request: Request) -> bool | RedirectResponse:
-        form = await request.form()
-        username = form.get("username")
-        password = form.get("password")
-        
-        print(f"DEBUG_LOGIN: Attempting login for username: '{username}'")
-
-        if not username or not password:
-            print("DEBUG_LOGIN: Username or password not provided in form.")
-            return False 
-
-        db: Session = next(get_db())
-        admin_user = None
-        try:
-            admin_user = db.query(AdminUserDB).filter(AdminUserDB.username == username).first()
-
-            if not admin_user:
-                print(f"DEBUG_LOGIN: User '{username}' not found in database.")
-                return False
-            
-            if not admin_user.verify_password(password):
-                print(f"DEBUG_LOGIN: Password verification failed for user '{username}'.")
-                return False
-            
-            print(f"DEBUG_LOGIN: Password verification successful for user '{username}'.")
-            request.session.update({"admin_user_id": admin_user.id, "admin_user_name": admin_user.username})
-            print(f"DEBUG_LOGIN: Session updated for user '{username}'. Login successful.")
-            
-            # Redirección a la lista de ApplicationDB (o la que prefieras)
-            redirect_url_name = "admin:applicationdb_list"
-            try:
-                redirect_url = request.url_for(redirect_url_name) 
-                print(f"DEBUG_LOGIN: Explicitly redirecting to '{redirect_url_name}': {redirect_url}")
-                return RedirectResponse(url=redirect_url, status_code=302)
-            except Exception as e:
-                print(f"DEBUG_LOGIN: Error generating URL for '{redirect_url_name}': {e}. Falling back to admin:index.")
-                redirect_url = request.url_for("admin:index") # Fallback a la página principal del admin
-                print(f"DEBUG_LOGIN: Explicitly redirecting to admin:index: {redirect_url}")
-                return RedirectResponse(url=redirect_url, status_code=302)
-
-        except Exception as e:
-            print(f"DEBUG_LOGIN: An exception occurred during login: {e}")
-            return False
-        finally:
-            if db:
-                db.close()
-
-    async def logout(self, request: Request) -> bool:
-        request.session.clear()
-        print("DEBUG_AUTH: User logged out, session cleared.")
-        return True
-
-    async def authenticate(self, request: Request) -> Optional[tuple[AuthCredentials, BaseUser] | RedirectResponse]:
-        print(f"DEBUG_AUTH: Authenticate called for path: {request.url.path}")
-        print(f"DEBUG_AUTH: Session content before auth check: {request.session}")
-        
-        admin_user_id = request.session.get("admin_user_id")
-        admin_user_name = request.session.get("admin_user_name")
-
-        if not admin_user_id or not admin_user_name:
-            print(f"DEBUG_AUTH: admin_user_id or admin_user_name not in session for path: {request.url.path}")
-            if "login" not in request.url.path:
-                login_url = request.url_for("admin:login")
-                print(f"DEBUG_AUTH: Redirecting to login_url: {login_url}")
-                return RedirectResponse(login_url, status_code=302)
-            else:
-                print(f"DEBUG_AUTH: No session, but already on login path. No redirect.")
-                return None
-        
-        print(f"DEBUG_AUTH: Session valid for user_id '{admin_user_id}', username '{admin_user_name}'. Returning AuthenticatedAdmin.")
-        return AuthCredentials(["authenticated"]), AuthenticatedAdmin(user_id=admin_user_id, username=admin_user_name)
-
-authentication_backend = AdminAuth(secret_key=settings.ADMIN_PANEL_SECRET_KEY)
-
-# Se necesita acceso al engine de SQLAlchemy, no a SessionLocal directamente para SQLAdmin
-admin = Admin(
-    app=app, 
-    engine=engine, 
-    title="Panel de Administración", 
-    base_url="/admin-panel",
-    authentication_backend=authentication_backend
-)
-
-# Crear vistas para los modelos de la base de datos
-class ApplicationAdmin(ModelView, model=ApplicationDB):
-    identity = "applicationdb"
-    column_list = [ApplicationDB.id, ApplicationDB.name, ApplicationDB.globally_active, ApplicationDB.min_version]
-    column_searchable_list = [ApplicationDB.name]
-    column_sortable_list = [ApplicationDB.id, ApplicationDB.name]
-    form_excluded_columns = [ApplicationDB.api_keys]
-    name = "Aplicación"
-    name_plural = "Aplicaciones"
-    icon = "fa-solid fa-rocket"
-
-class ApiKeyAdmin(ModelView, model=ApiKeyDB):
-    identity = "apikeydb"
-    column_list = [ApiKeyDB.id, ApiKeyDB.application_id, "application.name", ApiKeyDB.description, ApiKeyDB.is_active, ApiKeyDB.created_at]
-    column_labels = {ApiKeyDB.application_id: "ID App", "application.name": "Nombre App", ApiKeyDB.description: "Descripción", ApiKeyDB.is_active: "Activa"}
-    column_searchable_list = [ApiKeyDB.description, "application.name"]
-    column_sortable_list = [ApiKeyDB.id, ApiKeyDB.application_id, ApiKeyDB.created_at, ApiKeyDB.is_active]
-    form_columns = [ApiKeyDB.application, ApiKeyDB.description, ApiKeyDB.is_active]
-    can_create = False
-    can_edit = True
-    can_delete = True
-    name = "Clave API"
-    name_plural = "Claves API"
-    icon = "fa-solid fa-key"
-
-class AdminUserAdmin(ModelView, model=AdminUserDB):
-    identity = "adminuserdb"
-    column_list = [AdminUserDB.id, AdminUserDB.username]
-    column_searchable_list = [AdminUserDB.username]
-    column_sortable_list = [AdminUserDB.id, AdminUserDB.username]
-    
-    form_excluded_columns = [AdminUserDB.password_hash]
-    column_details_exclude_list = [AdminUserDB.password_hash]
-
-    name = "Usuario Admin"
-    name_plural = "Usuarios Admin"
-    icon = "fa-solid fa-user-shield"
-
-    async def on_model_change(self, data: dict, model: AdminUserDB, is_created: bool, request: Request) -> None:
-        pass
-
-    async def on_model_delete(self, model: AdminUserDB, request: Request) -> None:
-        SessionLocal = self.session_maker
-        with SessionLocal() as db:
-            count = db.query(AdminUserDB).count()
-            if count <= 1:
-                raise HTTPException(status_code=400, detail="No se puede eliminar el último usuario administrador.")
-
-admin.add_view(ApplicationAdmin)
-admin.add_view(ApiKeyAdmin)
-admin.add_view(AdminUserAdmin)
+init_admin(app, database.engine) # Initialize the admin panel
 
 # --- Ejecución Principal (para desarrollo) ---
 if __name__ == "__main__":
